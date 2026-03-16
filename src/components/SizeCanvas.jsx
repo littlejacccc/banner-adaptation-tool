@@ -3,13 +3,13 @@ import { fabric } from 'fabric';
 import { buildAdaptation } from '../utils/adaptation';
 
 const SAFE_ZONE_COLOR = 'rgba(255, 100, 0, 0.7)';
-const DISPLAY_MAX = 800; // max display width in px
+const DISPLAY_MAX = 800;
 
 const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPsd, showSafeZone }, ref) {
   const canvasElRef = useRef(null);
   const fabricRef = useRef(null);
   const safeZoneRef = useRef(null);
-  const [status, setStatus] = useState('idle'); // idle | loading | ready | error
+  const [status, setStatus] = useState('idle');
 
   const scale = Math.min(1, DISPLAY_MAX / size.width);
   const displayW = Math.round(size.width * scale);
@@ -20,17 +20,24 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
     exportPng: () => {
       const fc = fabricRef.current;
       if (!fc) return null;
-      // Export at full resolution
       return fc.toDataURL({ format: 'png', multiplier: 1 / scale });
     },
-    resetAuto: () => initCanvas(),
+    resetAuto: () => {
+      if (fabricRef.current) initCanvas();
+    },
   }));
 
   async function initCanvas() {
+    if (!fabricRef.current) {
+      console.warn('Fabric not ready for', size.name);
+      return;
+    }
+    
     if (!layers.background && !layers.subject && !layers.title) {
       setStatus('idle');
       return;
     }
+    
     setStatus('loading');
 
     try {
@@ -39,28 +46,27 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
       console.log('Adaptation built, objects:', adaptation.objects.length);
 
       const fc = fabricRef.current;
-      fc.clear();
-      fc.setWidth(displayW);
-      fc.setHeight(displayH);
-      fc.setZoom(scale);
-      fc.backgroundColor = '#2a2a2a'; // Lighter gray to see if canvas is rendering
-
-      // Add objects in order
-      for (const obj of adaptation.objects) {
-        console.log('Adding object:', obj.type);
-        await addFabricImage(fc, obj, scale);
+      if (!fc) {
+        console.error('Fabric lost during adaptation');
+        return;
       }
 
-      // Store safe zone for overlay
+      fc.clear();
+      fc.setBackgroundColor('#2a2a2a', fc.renderAll.bind(fc));
+
+      for (const obj of adaptation.objects) {
+        console.log('Adding object:', obj.type);
+        await addFabricImage(fc, obj);
+      }
+
       safeZoneRef.current = adaptation.safeZone;
       drawSafeZone(fc, adaptation.safeZone, showSafeZone);
 
       fc.renderAll();
-      console.log('Canvas ready');
+      console.log('Canvas ready for', size.name);
       setStatus('ready');
     } catch (e) {
       console.error('Canvas init error:', e);
-      console.error('Error stack:', e.stack);
       setStatus('error');
     }
   }
@@ -71,11 +77,9 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
         obj.dataUrl,
         (img) => {
           if (!img || !img.width) {
-            console.error('Failed to load image for:', obj.type);
             reject(new Error(`Image load failed for ${obj.type}`));
             return;
           }
-          console.log(`Loaded ${obj.type}: ${img.width}x${img.height}`);
           img.set({
             left: obj.x,
             top: obj.y,
@@ -94,16 +98,12 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
           resolve();
         },
         { crossOrigin: 'anonymous' },
-        (err) => {
-          console.error('Image load error for', obj.type, ':', err);
-          reject(err);
-        }
+        reject
       );
     });
   }
 
   function drawSafeZone(fc, safeZone, visible) {
-    // Remove existing safe zone rect
     const existing = fc.getObjects().filter(o => o.data?.isSafeZone);
     existing.forEach(o => fc.remove(o));
 
@@ -126,8 +126,14 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
     fc.bringToFront(rect);
   }
 
-  // Init fabric canvas once
+  // Init Fabric once after mount
   useEffect(() => {
+    if (!canvasElRef.current) {
+      console.error('Canvas element not found for', size.name);
+      return;
+    }
+
+    console.log('Initializing Fabric for', size.name);
     const fc = new fabric.Canvas(canvasElRef.current, {
       width: displayW,
       height: displayH,
@@ -135,16 +141,24 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
       selection: true,
     });
     fabricRef.current = fc;
-    console.log('Fabric canvas initialized:', displayW, 'x', displayH);
-    return () => fc.dispose();
+    console.log('Fabric initialized:', displayW, 'x', displayH);
+
+    return () => {
+      if (fabricRef.current) {
+        fabricRef.current.dispose();
+        fabricRef.current = null;
+      }
+    };
   }, []);
 
-  // Re-init when layers change
+  // Trigger render when layers change
   useEffect(() => {
-    initCanvas();
-  }, [layers, safeAreaFromPsd, size]);
+    if (fabricRef.current) {
+      initCanvas();
+    }
+  }, [layers, safeAreaFromPsd]);
 
-  // Toggle safe zone overlay
+  // Toggle safe zone
   useEffect(() => {
     const fc = fabricRef.current;
     if (!fc || !safeZoneRef.current) return;
@@ -157,7 +171,7 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
       {status === 'loading' && <div className="canvas-status">适配中...</div>}
       {status === 'error' && <div className="canvas-status error">适配失败</div>}
       {status === 'idle' && <div className="canvas-status">请先导入素材</div>}
-      <canvas ref={canvasElRef} />
+      <canvas ref={canvasElRef} width={displayW} height={displayH} />
     </div>
   );
 });
