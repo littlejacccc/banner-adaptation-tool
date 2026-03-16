@@ -27,20 +27,27 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
   }));
 
   async function initCanvas() {
-    if (!layers.background && !layers.subject && !layers.title) return;
+    if (!layers.background && !layers.subject && !layers.title) {
+      setStatus('idle');
+      return;
+    }
     setStatus('loading');
 
     try {
+      console.log('Building adaptation for size:', size.name);
       const adaptation = await buildAdaptation(layers, safeAreaFromPsd, size);
+      console.log('Adaptation built, objects:', adaptation.objects.length);
 
       const fc = fabricRef.current;
       fc.clear();
       fc.setWidth(displayW);
       fc.setHeight(displayH);
       fc.setZoom(scale);
+      fc.backgroundColor = '#2a2a2a'; // Lighter gray to see if canvas is rendering
 
       // Add objects in order
       for (const obj of adaptation.objects) {
+        console.log('Adding object:', obj.type);
         await addFabricImage(fc, obj, scale);
       }
 
@@ -49,33 +56,49 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
       drawSafeZone(fc, adaptation.safeZone, showSafeZone);
 
       fc.renderAll();
+      console.log('Canvas ready');
       setStatus('ready');
     } catch (e) {
       console.error('Canvas init error:', e);
+      console.error('Error stack:', e.stack);
       setStatus('error');
     }
   }
 
   function addFabricImage(fc, obj) {
-    return new Promise((resolve) => {
-      fabric.Image.fromURL(obj.dataUrl, (img) => {
-        img.set({
-          left: obj.x,
-          top: obj.y,
-          scaleX: obj.width / img.width,
-          scaleY: obj.height / img.height,
-          selectable: obj.type !== 'background',
-          evented: obj.type !== 'background',
-          data: { type: obj.type },
-        });
-        if (obj.type === 'background') {
-          img.sendToBack && fc.add(img);
-          fc.sendToBack(img);
-        } else {
-          fc.add(img);
+    return new Promise((resolve, reject) => {
+      fabric.Image.fromURL(
+        obj.dataUrl,
+        (img) => {
+          if (!img || !img.width) {
+            console.error('Failed to load image for:', obj.type);
+            reject(new Error(`Image load failed for ${obj.type}`));
+            return;
+          }
+          console.log(`Loaded ${obj.type}: ${img.width}x${img.height}`);
+          img.set({
+            left: obj.x,
+            top: obj.y,
+            scaleX: obj.width / img.width,
+            scaleY: obj.height / img.height,
+            selectable: obj.type !== 'background',
+            evented: obj.type !== 'background',
+            data: { type: obj.type },
+          });
+          if (obj.type === 'background') {
+            fc.add(img);
+            fc.sendToBack(img);
+          } else {
+            fc.add(img);
+          }
+          resolve();
+        },
+        { crossOrigin: 'anonymous' },
+        (err) => {
+          console.error('Image load error for', obj.type, ':', err);
+          reject(err);
         }
-        resolve();
-      }, { crossOrigin: 'anonymous' });
+      );
     });
   }
 
@@ -108,10 +131,11 @@ const SizeCanvas = forwardRef(function SizeCanvas({ size, layers, safeAreaFromPs
     const fc = new fabric.Canvas(canvasElRef.current, {
       width: displayW,
       height: displayH,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: '#2a2a2a',
       selection: true,
     });
     fabricRef.current = fc;
+    console.log('Fabric canvas initialized:', displayW, 'x', displayH);
     return () => fc.dispose();
   }, []);
 
