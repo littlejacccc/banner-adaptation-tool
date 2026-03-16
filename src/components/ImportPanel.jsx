@@ -4,12 +4,17 @@ export default function ImportPanel({ onImport }) {
   async function handlePsdUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    console.log('Starting PSD upload:', file.name, file.size, 'bytes');
     try {
+      console.log('Parsing PSD...');
       const result = await parsePSD(file);
+      console.log('PSD parsed successfully:', result);
       onImport(result);
+      console.log('Import callback completed');
     } catch (err) {
+      console.error('PSD parse error:', err);
+      console.error('Error stack:', err.stack);
       alert('PSD 解析失败: ' + err.message);
-      console.error(err);
     }
   }
 

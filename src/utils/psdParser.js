@@ -30,8 +30,13 @@ async function layerToImageData(layer, psd) {
 }
 
 export async function parsePSD(file) {
+  console.log('parsePSD: Reading file buffer...');
   const buffer = await file.arrayBuffer();
+  console.log('parsePSD: Buffer size:', buffer.byteLength);
+  
+  console.log('parsePSD: Parsing with @webtoon/psd...');
   const psd = Psd.parse(buffer);
+  console.log('parsePSD: PSD parsed, dimensions:', psd.width, 'x', psd.height);
 
   const result = {
     width: psd.width,
@@ -52,11 +57,13 @@ export async function parsePSD(file) {
           width: node.width,
           height: node.height,
         };
+        console.log('parsePSD: Found safe area:', result.safeArea);
         return;
       }
 
       if (result.layers[type] === null && node.width > 0 && node.height > 0) {
         try {
+          console.log(`parsePSD: Processing layer "${node.name}" as ${type}...`);
           const dataUrl = await layerToImageData(node, psd);
           result.layers[type] = {
             dataUrl,
@@ -65,6 +72,7 @@ export async function parsePSD(file) {
             width: node.width,
             height: node.height,
           };
+          console.log(`parsePSD: Layer ${type} processed successfully`);
         } catch (e) {
           console.warn(`Failed to composite layer "${node.name}":`, e);
         }
@@ -76,9 +84,11 @@ export async function parsePSD(file) {
     }
   }
 
+  console.log('parsePSD: Processing', psd.children.length, 'top-level nodes...');
   for (const child of psd.children) {
     await processNode(child);
   }
 
+  console.log('parsePSD: Complete. Layers found:', Object.keys(result.layers).filter(k => result.layers[k]));
   return result;
 }
