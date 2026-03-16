@@ -1,45 +1,14 @@
 import { getDefaultSafeZone } from '../config/sizes';
+import { extendBackgroundWithAI } from './aiExtend';
 
 /**
- * Extend background to target size using cover + edge blur fill
+ * Extend background to target size using AI or fallback
  */
 export async function adaptBackground(srcDataUrl, srcW, srcH, dstW, dstH) {
-  const img = await loadImage(srcDataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = dstW;
-  canvas.height = dstH;
-  const ctx = canvas.getContext('2d');
-
-  const scaleX = dstW / srcW;
-  const scaleY = dstH / srcH;
-  const scale = Math.max(scaleX, scaleY);
-
-  const scaledW = srcW * scale;
-  const scaledH = srcH * scale;
-  const offsetX = (dstW - scaledW) / 2;
-  const offsetY = (dstH - scaledH) / 2;
-
-  // If extreme ratio change, fill edges with blurred extension first
-  const ratioChange = Math.max(scaleX / scaleY, scaleY / scaleX);
-  if (ratioChange > 1.8) {
-    // Draw blurred stretched version as base
-    const blurCanvas = document.createElement('canvas');
-    blurCanvas.width = dstW;
-    blurCanvas.height = dstH;
-    const blurCtx = blurCanvas.getContext('2d');
-    blurCtx.filter = 'blur(20px)';
-    blurCtx.drawImage(img, 0, 0, dstW, dstH);
-    blurCtx.filter = 'none';
-    // Darken slightly
-    blurCtx.fillStyle = 'rgba(0,0,0,0.2)';
-    blurCtx.fillRect(0, 0, dstW, dstH);
-    ctx.drawImage(blurCanvas, 0, 0);
-  }
-
-  // Draw cover-scaled image on top
-  ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
-
-  return canvas.toDataURL('image/png');
+  console.log(`Adapting background from ${srcW}x${srcH} to ${dstW}x${dstH}`);
+  
+  // 使用通义万象 AI 扩展
+  return await extendBackgroundWithAI(srcDataUrl, dstW, dstH);
 }
 
 /**
