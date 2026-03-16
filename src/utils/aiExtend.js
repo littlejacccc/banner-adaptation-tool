@@ -3,7 +3,7 @@
  * 文档：https://help.aliyun.com/zh/model-studio/developer-reference/api-details-9
  */
 
-const DASHSCOPE_API_KEY = process.env.VITE_DASHSCOPE_API_KEY || '';
+const DASHSCOPE_API_KEY = import.meta.env.VITE_DASHSCOPE_API_KEY || '';
 const API_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation';
 
 /**
